@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSchedules, useShifts, useEmployees, useWorkStatuses, getSchedulableEmployees } from '@/hrm/store';
+import { useHrmPermission } from '@/hrm/usePermission';
 import type { Schedule } from '@/hrm/types';
 import { Button, Badge } from '@/components/ui';
-import { CalendarDays, Download, Upload, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, FileSpreadsheet, Save } from 'lucide-react';
+import { CalendarDays, Download, Upload, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, FileSpreadsheet, Save, Pencil, Eye, X } from 'lucide-react';
 import ExportDropdown from '@/components/ExportDropdown';
 import { exportToPdf } from '@/utils/pdf';
 import { localDateStr } from '@/hrm/dateUtils';
@@ -61,7 +62,11 @@ export default function SchedulePage() {
   const [shifts] = useShifts();
   const [employees] = useEmployees();
   const [statuses] = useWorkStatuses();
+  const { can } = useHrmPermission();
+  const canEdit = can('hrm_schedules', 'update');
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
+  const [isEditing, setIsEditing] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState<Map<string, string | null>>(new Map());
   const [importPreview, setImportPreview] = useState<ParsedSchedule[] | null>(null);
   const [importStatus, setImportStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -264,6 +269,31 @@ export default function SchedulePage() {
     setImportStatus({ ok: true, msg: `Đã nhập ${importPreview.length} mục lịch làm việc thành công.` });
   };
 
+  const saveChanges = () => {
+    if (pendingChanges.size === 0) {
+      setIsEditing(false);
+      return;
+    }
+    setSchedules((prev) => {
+      let next = [...prev];
+      for (const [key, shiftId] of pendingChanges.entries()) {
+        const [empId, dateStr] = key.split('|');
+        next = next.filter((s) => !(s.employee_id === empId && s.work_date === dateStr));
+        if (shiftId) {
+          next.push({ employee_id: empId, work_date: dateStr, shift_id: shiftId });
+        }
+      }
+      return next;
+    });
+    setPendingChanges(new Map());
+    setIsEditing(false);
+  };
+
+  const cancelChanges = () => {
+    setPendingChanges(new Map());
+    setIsEditing(false);
+  };
+
   const exportScheduleExcel = async () => {
     await loadXLSX();
     const XLSX = (window as any).XLSX;
@@ -326,10 +356,24 @@ export default function SchedulePage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={downloadTemplate}>
+            {!isEditing && canEdit ? (
+              <Button variant="secondary" onClick={() => setIsEditing(true)}>
+                <Pencil className="w-4 h-4" /> Chỉnh sửa lịch
+              </Button>
+            ) : isEditing ? (
+              <>
+                <Button onClick={saveChanges}>
+                  <Save className="w-4 h-4" /> Lưu thay đổi
+                </Button>
+                <Button variant="secondary" onClick={cancelChanges}>
+                  <X className="w-4 h-4" /> Hủy
+                </Button>
+              </>
+            ) : null}
+            <Button variant="secondary" onClick={downloadTemplate} disabled={isEditing}>
               <Download className="w-4 h-4" /> Tải file mẫu (.xlsx)
             </Button>
-            <Button onClick={() => fileInputRef.current?.click()}>
+            <Button onClick={() => fileInputRef.current?.click()} disabled={isEditing}>
               <Upload className="w-4 h-4" /> Nhập lịch (Excel)
             </Button>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileUpload} className="hidden" />
@@ -401,27 +445,33 @@ export default function SchedulePage() {
                   {weekDays.map((day, di) => {
                     const dateStr = formatDate(day);
                     const key = `${emp.id}|${dateStr}`;
-                    const shiftId = scheduleMap.get(key);
+                    const baseShiftId = scheduleMap.get(key) ?? null;
+                    const hasPending = pendingChanges.has(key);
+                    const shiftId = hasPending ? pendingChanges.get(key) : baseShiftId;
                     const shift = shiftId ? getShift(shiftId) : null;
                     return (
                       <td key={di} className="py-2 px-1 text-center">
-                        <select
-                          value={shiftId ?? ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setSchedules((prev) => {
-                              const filtered = prev.filter((s) => !(s.employee_id === emp.id && s.work_date === dateStr));
-                              if (!val) return filtered;
-                              return [...filtered, { employee_id: emp.id, work_date: dateStr, shift_id: val }];
-                            });
-                          }}
-                          className={`w-full text-center text-xs font-medium rounded-md border px-1 py-1.5 cursor-pointer bg-transparent transition-all focus:outline-none focus:ring-1 focus:ring-primary/40 ${shift ? getShiftColor(shiftId) : 'text-line border-transparent hover:border-line/40'}`}
-                        >
-                          <option value="">—</option>
-                          {shifts.map((s) => (
-                            <option key={s.id} value={s.id}>{(s.code || '').toUpperCase()} · {s.name}</option>
-                          ))}
-                        </select>
+                        {isEditing ? (
+                          <select
+                            value={shiftId ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setPendingChanges((prev) => { const m = new Map(prev); m.set(key, val || null); return m; });
+                            }}
+                            className={`w-full text-center text-xs font-medium rounded-md border px-1 py-1.5 cursor-pointer bg-transparent transition-all focus:outline-none focus:ring-1 focus:ring-primary/40 ${shift ? getShiftColor(shiftId) : 'text-line border-transparent hover:border-line/40'}`}
+                          >
+                            <option value="">—</option>
+                            {shifts.map((s) => (
+                              <option key={s.id} value={s.id}>{(s.code || '').toUpperCase()} · {s.name}</option>
+                            ))}
+                          </select>
+                        ) : shift ? (
+                          <span className={`inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-medium border ${getShiftColor(shiftId)}`}>
+                            {shift.code}
+                          </span>
+                        ) : (
+                          <span className="text-line text-xs">—</span>
+                        )}
                       </td>
                     );
                   })}
