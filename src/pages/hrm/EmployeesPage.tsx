@@ -2,7 +2,9 @@ import { useState, useMemo, useRef } from 'react';
 import { useEmployees, useDepartments, useWorkStatuses, nextEmployeeCode, genId } from '@/hrm/store';
 import type { Employee } from '@/hrm/types';
 import { Field, TextInput, Select, Toggle, Button, Badge } from '@/components/ui';
-import { Users, Plus, Pencil, Trash2, Search, Save, Phone, Calendar, Briefcase, Download, Upload, FileDown } from 'lucide-react';
+import { Users, Plus, Pencil, Trash2, Search, Save, Phone, Calendar, Briefcase, Download, Upload, FileDown, UserPlus, KeyRound, ShieldCheck } from 'lucide-react';
+import { createUserFromEmployee } from '@/store/authStore';
+import { useRouter } from '@/router/RouterContext';
 import { localDateStr } from '@/hrm/dateUtils';
 import { useAuth } from '@/auth/AuthContext';
 import { useHrmPermission } from '@/hrm/usePermission';
@@ -48,6 +50,7 @@ export default function EmployeesPage() {
   const [departments] = useDepartments();
   const [statuses] = useWorkStatuses();
   const { session, user } = useAuth();
+  const { navigate } = useRouter();
   const { getLevel, LEVEL_RANK } = useHrmPermission();
   const empLevel = getLevel('hrm_profiles');
   const activeHotelId = session?.activeHotelId ?? 'htl_01';
@@ -59,6 +62,10 @@ export default function EmployeesPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
+  // Account-creation dialog state
+  const [accountPrompt, setAccountPrompt] = useState<{ employee: Employee } | null>(null);
+  const [accountPassword, setAccountPassword] = useState('123456');
+  const [createdAccount, setCreatedAccount] = useState<{ code: string; userId: string } | null>(null);
 
   const deptName = (id: string) => departments.find((d) => d.id === id)?.name ?? '—';
   const statusName = (id: string) => statuses.find((s) => s.id === id)?.name ?? '—';
@@ -124,6 +131,34 @@ export default function EmployeesPage() {
     });
     setShowForm(false);
     setEditing(null);
+    // For newly-created employees, prompt to create a login account
+    const wasNew = !employees.some((e) => e.id === emp.id);
+    if (wasNew) {
+      setAccountPassword('123456');
+      setAccountPrompt({ employee: emp });
+    }
+  };
+
+  const confirmCreateAccount = () => {
+    if (!accountPrompt) return;
+    const emp = accountPrompt.employee;
+    const created = createUserFromEmployee(emp, accountPassword || '123456', activeHotelId, {
+      is_super_admin: user?.is_super_admin ?? false,
+      activeHotelId,
+    });
+    setAccountPrompt(null);
+    if (created) {
+      setCreatedAccount({ code: emp.employee_code, userId: created.id });
+    } else {
+      setImportMsg(`Tài khoản ${emp.employee_code} đã tồn tại. Không tạo mới.`);
+    }
+  };
+
+  const skipCreateAccount = () => setAccountPrompt(null);
+
+  const goToUserManagement = () => {
+    setCreatedAccount(null);
+    navigate('/system/users');
   };
 
   const handleDelete = (id: string) => {
@@ -336,6 +371,64 @@ export default function EmployeesPage() {
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditing(null); }}
         />
+      )}
+
+      {/* Account creation confirmation dialog */}
+      {accountPrompt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={skipCreateAccount} />
+          <div className="relative w-full max-w-md bg-card rounded-2xl shadow-2xl border border-line/30 flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-line/30">
+              <h3 className="text-base font-semibold text-ink flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-primary" /> Tạo tài khoản đăng nhập
+              </h3>
+              <button onClick={skipCreateAccount} className="p-1.5 rounded-lg text-info hover:bg-primary-soft/40 transition-colors">✕</button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <p className="text-sm text-info">
+                Tạo tài khoản đăng nhập cho nhân viên{' '}
+                <span className="font-semibold text-ink">{accountPrompt.employee.employee_code}</span>{' '}
+                ({accountPrompt.employee.display_name})?
+              </p>
+              <Field label="Mật khẩu">
+                <TextInput value={accountPassword} onChange={(e) => setAccountPassword(e.target.value)} placeholder="123456" />
+              </Field>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary-soft/20 border border-primary/10 text-xs text-info">
+                <KeyRound className="w-3.5 h-3.5 shrink-0 text-primary" />
+                <span>Tài khoản sẽ được tạo với tên đăng nhập là mã nhân viên và tất cả quyền mặc định là "Không hiển thị".</span>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-line/30 flex items-center justify-end gap-3">
+              <Button variant="secondary" onClick={skipCreateAccount}>Bỏ qua</Button>
+              <Button onClick={confirmCreateAccount}><Save className="w-3.5 h-3.5" /> Tạo tài khoản</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success notice with link to User Management */}
+      {createdAccount && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={() => setCreatedAccount(null)} />
+          <div className="relative w-full max-w-md bg-card rounded-2xl shadow-2xl border border-line/30 flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-line/30">
+              <h3 className="text-base font-semibold text-ink flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-success" /> Tài khoản đã tạo
+              </h3>
+              <button onClick={() => setCreatedAccount(null)} className="p-1.5 rounded-lg text-info hover:bg-primary-soft/40 transition-colors">✕</button>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <p className="text-sm text-ink">
+                Đã tạo tài khoản <span className="font-mono font-semibold">{createdAccount.code}</span>.
+              </p>
+              <p className="text-sm text-info">Vui lòng phân quyền cho tài khoản này.</p>
+            </div>
+            <div className="px-6 py-4 border-t border-line/30 flex items-center justify-end gap-3">
+              <Button variant="secondary" onClick={() => setCreatedAccount(null)}>Đóng</Button>
+              <Button onClick={goToUserManagement}><ShieldCheck className="w-3.5 h-3.5" /> Phân quyền ngay</Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -347,6 +347,48 @@ export function deleteUserHotelMapping(id: string): void {
   mappingsStore.set((prev) => prev.filter((m) => m.id !== id));
 }
 
+/** Build a permission matrix with all sub-features defaulted to 'hidden'. */
+export function blankPermissions(): FeaturePermissionMatrix {
+  const allSubs: SubFeature[] = (['hrm', 'frontdesk', 'housekeeping', 'inventory', 'sales', 'system'] as FeatureModule[])
+    .flatMap((m) => MODULE_SUBFEATURES[m]);
+  const out: FeaturePermissionMatrix = {};
+  for (const sf of allSubs) out[sf] = 'hidden';
+  return out;
+}
+
+/**
+ * Auto-create a login account for an employee.
+ * Links the User record back to the Employee via employee_id.
+ * Returns the created User, or null if a user with the same username already exists.
+ */
+export function createUserFromEmployee(
+  employee: { id: string; employee_code: string; display_name: string; full_name: string },
+  password: string,
+  hotelId: string | null,
+  actor?: ActorContext,
+): User | null {
+  const existing = usersStore.get().find((u) => u.username === employee.employee_code);
+  if (existing) return null;
+  const user = addUser(
+    {
+      username: employee.employee_code,
+      password,
+      full_name: employee.full_name || employee.display_name,
+      is_super_admin: false,
+      employee_id: employee.id,
+    },
+    actor,
+  );
+  if (hotelId) {
+    setUserHotelMappings(
+      user.id,
+      [{ hotel_id: hotelId, role: 'staff', permissions: blankPermissions() }],
+      actor,
+    );
+  }
+  return user;
+}
+
 // ── Role Template CRUD ──────────────────────────────────────────
 export function addRoleTemplate(data: Omit<RoleTemplate, 'id'>): RoleTemplate {
   const role: RoleTemplate = { ...data, id: ID.role() };
