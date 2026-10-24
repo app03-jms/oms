@@ -92,6 +92,8 @@ export default function AttendancePage() {
   const { user } = useAuth();
   const { getLevel, LEVEL_RANK } = useHrmPermission();
   const attLevel = getLevel('hrm_attendance');
+  const isOwnOnly = attLevel === 'view' && !user?.is_super_admin;
+  const today = todayStr();
   const [selectedEmpId, setSelectedEmpId] = useState<string>('');
 
   // Resolve current user's linked employee: match employee.user_id === user.id,
@@ -109,20 +111,20 @@ export default function AttendancePage() {
   // For 'view_all' and above: show all employees.
   const scopedEmployees = useMemo(() => {
     if (attLevel === 'hidden') return [];
-    if (attLevel === 'view' && !user?.is_super_admin) {
+    if (isOwnOnly) {
       return myEmployee ? [myEmployee] : [];
     }
     return employees;
-  }, [employees, attLevel, myEmployee, user]);
+  }, [employees, attLevel, myEmployee, isOwnOnly]);
 
   // Today's logs scoped to the user's permission level
   const scopedTodayLogs = useMemo(() => {
     const dayLogs = logs.filter((l) => l.date === today);
-    if (attLevel === 'view' && !user?.is_super_admin) {
+    if (isOwnOnly) {
       return myEmployee ? dayLogs.filter((l) => l.employee_id === myEmployee.id) : [];
     }
     return dayLogs;
-  }, [logs, today, attLevel, myEmployee, user]);
+  }, [logs, today, isOwnOnly, myEmployee]);
 
   const summaryStats = useMemo(() => ({
     total: scopedTodayLogs.length,
@@ -149,14 +151,12 @@ export default function AttendancePage() {
   const [clockAction, setClockAction] = useState<'in' | 'out'>('in');
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null);
 
-  const today = todayStr();
-
   // Auto-select: for personal-scope users, lock to their own employee record.
   // For full-scope users, default to first available employee.
   useEffect(() => {
     if (scopedEmployees.length === 0) return;
     if (!scopedEmployees.some((e) => e.id === selectedEmpId)) {
-      if (attLevel === 'view' && myEmployee) {
+      if (isOwnOnly && myEmployee) {
         setSelectedEmpId(myEmployee.id);
       } else {
         setSelectedEmpId(scopedEmployees[0].id);
