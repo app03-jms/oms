@@ -3,6 +3,8 @@ import { useAttendanceLogs, useApprovalRequests, useEmployees, useShifts } from 
 import type { AttendanceLog, AttendanceStatus } from '@/hrm/types';
 import { Badge, Select, TextInput } from '@/components/ui';
 import { CalendarCheck, Search, MapPin } from 'lucide-react';
+import ExportDropdown from '@/components/ExportDropdown';
+import { exportToPdf } from '@/utils/pdf';
 import { localDateStr } from '@/hrm/dateUtils';
 
 function formatDate(d: Date): string {
@@ -110,6 +112,49 @@ export default function TimesheetPage() {
     }
   };
 
+  const exportTimesheetPdf = () => {
+    const columns = [
+      { label: 'Ngày' },
+      { label: 'Nhân viên' },
+      { label: 'Ca' },
+      { label: 'Giờ vào', width: '55px' },
+      { label: 'Giờ ra', width: '55px' },
+      { label: 'Trạng thái' },
+      { label: 'Ghi chú' },
+    ];
+    const rows = filtered.map((log) => {
+      const cfg = STATUS_CONFIG[log.status] ?? STATUS_CONFIG.valid;
+      return [
+        formatDateDisplay(log.date),
+        `${empName(log.employee_id)} (${empCode(log.employee_id)})`,
+        shiftCode(log.shift_id) || '—',
+        log.clock_in || '—',
+        log.clock_out || '—',
+        cfg.label,
+        log.mismatch_reason || log.admin_note || '',
+      ];
+    });
+    const rangeLabel = `${formatDateDisplay(fromDate)} – ${formatDateDisplay(toDate)}`;
+    exportToPdf({
+      title: 'Bảng chấm công',
+      subtitle: `Kỳ ${rangeLabel} · ${filtered.length} bản ghi`,
+      columns,
+      rows,
+      summary: [
+        { label: 'Tổng bản ghi', value: filtered.length },
+        { label: 'Đúng ca', value: filtered.filter((l) => l.status === 'valid').length },
+        { label: 'Chờ duyệt', value: filtered.filter((l) => l.status === 'pending_approval').length },
+        { label: 'Ngoài bán kính', value: filtered.filter((l) => l.is_outside_radius).length },
+      ],
+      signatureBlocks: [
+        { title: 'Người lập biểu', subtitle: '(Ký, ghi rõ họ tên)' },
+        { title: 'Trưởng phòng', subtitle: '(Ký, ghi rõ họ tên)' },
+        { title: 'Giám đốc', subtitle: '(Ký, ghi rõ họ tên)' },
+      ],
+      fileName: `Bang_cham_cong_${rangeLabel.replace(/[/\s–]/g, '_')}.pdf`,
+    });
+  };
+
   return (
     <div className="px-8 pt-6 pb-8">
       {/* Page header */}
@@ -123,10 +168,13 @@ export default function TimesheetPage() {
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
             <CalendarCheck className="w-5 h-5 text-primary" />
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold text-ink leading-tight">Bảng chấm công</h1>
             <p className="text-sm text-info mt-0.5">Tổng hợp dữ liệu chấm công theo ngày và tháng.</p>
           </div>
+          <ExportDropdown options={[
+            { key: 'pdf', label: 'Xuất PDF (.pdf)', icon: 'pdf', onClick: exportTimesheetPdf },
+          ]} />
         </div>
       </div>
 

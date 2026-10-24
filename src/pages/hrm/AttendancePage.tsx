@@ -22,6 +22,8 @@ import {
   CalendarClock,
   Lock,
 } from 'lucide-react';
+import ExportDropdown from '@/components/ExportDropdown';
+import { exportToPdf } from '@/utils/pdf';
 import { localDateStr } from '@/hrm/dateUtils';
 
 function todayStr(): string {
@@ -316,6 +318,39 @@ export default function AttendancePage() {
     return shifts.find((s) => s.id === id) ?? null;
   }, [todayLog, todayApproval, shifts]);
 
+  const exportAttendancePdf = () => {
+    const columns = [
+      { label: 'Ngày' },
+      { label: 'Nhân viên' },
+      { label: 'Ca lịch trình' },
+      { label: 'Giờ vào', width: '60px' },
+      { label: 'Giờ ra', width: '60px' },
+      { label: 'Trạng thái' },
+    ];
+    const today = todayStr();
+    const dayLogs = logs.filter((l) => l.date === today);
+    const rows = dayLogs.map((l) => {
+      const emp = employees.find((e) => e.id === l.employee_id);
+      const sch = shifts.find((s) => s.id === l.shift_id);
+      const statusLabel = l.status === 'valid' ? 'Đúng ca' : l.status === 'pending_approval' ? 'Chờ duyệt' : 'Từ chối';
+      return [
+        l.date,
+        emp ? `${emp.display_name} (${emp.employee_code})` : '—',
+        sch ? `${(sch.code || '').toUpperCase()} · ${sch.name}` : '—',
+        l.clock_in || '—',
+        l.clock_out || '—',
+        statusLabel,
+      ];
+    });
+    exportToPdf({
+      title: 'Chấm công hôm nay',
+      subtitle: `Ngày ${today} · ${dayLogs.length} bản ghi`,
+      columns,
+      rows,
+      fileName: `Cham_cong_${today}.pdf`,
+    });
+  };
+
   return (
     <div className="px-8 pt-6 pb-8">
       {/* Breadcrumb */}
@@ -329,10 +364,13 @@ export default function AttendancePage() {
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
             <Clock className="w-5 h-5 text-primary" />
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold text-ink leading-tight">Chấm công</h1>
             <p className="text-sm text-info mt-0.5">Ghi nhận thời gian vào/ra của nhân viên theo ca.</p>
           </div>
+          <ExportDropdown options={[
+            { key: 'pdf', label: 'Xuất PDF (.pdf)', icon: 'pdf', onClick: exportAttendancePdf },
+          ]} />
         </div>
       </div>
 
