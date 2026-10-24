@@ -9,6 +9,7 @@ import {
   addUser,
   updateUser,
   deleteUser,
+  adminResetPassword,
   setUserHotelMappings,
   getPermissionForSubFeature,
   HOTEL_ADMIN_PERMISSIONS,
@@ -35,6 +36,10 @@ import {
   Upload,
   FileDown,
   ChevronDown,
+  KeyRound,
+  Eye,
+  EyeOff,
+  AlertCircle,
 } from 'lucide-react';
 import { exportToXlsx, downloadTemplate, parseXlsx, type SheetColumn } from '@/utils/xlsx';
 import { generateUniqueId } from '@/utils/idGenerator';
@@ -408,6 +413,119 @@ function UserFormModal({
   );
 }
 
+function ResetPasswordModal({
+  targetUser,
+  actor,
+  onClose,
+}: {
+  targetUser: User;
+  actor: { is_super_admin: boolean; activeHotelId: string | null };
+  onClose: () => void;
+}) {
+  const DEFAULT_PASSWORD = '123456';
+  const [newPassword, setNewPassword] = useState(DEFAULT_PASSWORD);
+  const [requireForceChange, setRequireForceChange] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+
+  const submit = () => {
+    setError('');
+    if (newPassword.trim().length < 6) {
+      setError('Mật khẩu phải có ít nhất 6 ký tự.');
+      return;
+    }
+    adminResetPassword(targetUser.id, newPassword.trim(), requireForceChange, actor);
+    setDone(true);
+    setTimeout(onClose, 900);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-card rounded-2xl shadow-2xl border border-line/30 flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-line/30">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <KeyRound className="w-4 h-4 text-primary" />
+            </div>
+            <h3 className="text-base font-semibold text-ink">Đặt lại mật khẩu</h3>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-info hover:bg-primary-soft/40 transition-colors">✕</button>
+        </div>
+
+        {done ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 py-12 px-6">
+            <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center">
+              <KeyRound className="w-6 h-6 text-success" />
+            </div>
+            <p className="text-sm font-medium text-ink">Đã đặt lại mật khẩu cho <span className="font-mono">{targetUser.username}</span>.</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              <div className="flex items-center gap-2 rounded-lg bg-primary-soft/20 border border-primary/10 px-3 py-2 text-xs text-info">
+                <span>Tài khoản: <span className="font-mono font-medium text-ink">{targetUser.username}</span></span>
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 rounded-lg bg-danger/10 border border-danger/20 px-3 py-2 text-xs text-danger">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-info mb-1.5">Mật khẩu mới</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-line" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full pl-10 pr-20 py-2.5 rounded-lg border border-line/50 bg-bg-main text-ink text-sm placeholder:text-line/60 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setNewPassword(DEFAULT_PASSWORD)}
+                      className="px-2 py-1 rounded text-[10px] font-medium text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      Mặc định
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((s) => !s)}
+                      className="p-1 rounded text-line hover:text-info transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-lg bg-bg-main/50 border border-line/20">
+                <div>
+                  <span className="text-sm font-medium text-ink">Bắt buộc đổi mật khẩu lúc đăng nhập</span>
+                  <p className="text-xs text-line mt-0.5">Người dùng sẽ phải tự đổi mật khẩu ở lần đăng nhập tiếp theo.</p>
+                </div>
+                <Toggle checked={requireForceChange} onChange={setRequireForceChange} />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-line/30 flex items-center justify-end gap-3">
+              <Button variant="secondary" onClick={onClose}>Hủy</Button>
+              <Button onClick={submit}>
+                <KeyRound className="w-3.5 h-3.5" /> Đặt lại
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function UserManagementPage() {
   const { path } = useRouter();
   const { user: currentUser, session } = useAuth();
@@ -419,6 +537,7 @@ export default function UserManagementPage() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
+  const [resetTarget, setResetTarget] = useState<User | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importMsg, setImportMsg] = useState('');
 
@@ -686,11 +805,14 @@ export default function UserManagementPage() {
                       {canEdit && (
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-end gap-1">
-                            <button onClick={() => { setEditing(u); setShowForm(true); }} className="p-1.5 rounded text-info hover:bg-primary-soft/40 transition-colors">
+                            <button onClick={() => { setEditing(u); setShowForm(true); }} className="p-1.5 rounded text-info hover:bg-primary-soft/40 transition-colors" title="Sửa">
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
+                            <button onClick={() => setResetTarget(u)} className="p-1.5 rounded text-info hover:bg-primary-soft/40 transition-colors" title="Đặt lại mật khẩu">
+                              <KeyRound className="w-3.5 h-3.5" />
+                            </button>
                             {canDelete && (
-                              <button onClick={() => handleDelete(u.id)} className="p-1.5 rounded text-danger hover:bg-danger/10 transition-colors">
+                              <button onClick={() => handleDelete(u.id)} className="p-1.5 rounded text-danger hover:bg-danger/10 transition-colors" title="Xóa">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
@@ -717,6 +839,14 @@ export default function UserManagementPage() {
           roleTemplates={roleTemplates}
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditing(null); }}
+        />
+      )}
+
+      {resetTarget && (
+        <ResetPasswordModal
+          targetUser={resetTarget}
+          actor={actor}
+          onClose={() => setResetTarget(null)}
         />
       )}
     </div>

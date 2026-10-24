@@ -19,6 +19,7 @@ import UserManagementPage from '@/pages/settings/UserManagementPage';
 import RoleManagementPage from '@/pages/settings/RoleManagementPage';
 import HotelConfigPage from '@/pages/system/HotelConfigPage';
 import HotelSelectionScreen from '@/pages/HotelSelectionScreen';
+import ChangePasswordModal from '@/components/ChangePasswordModal';
 
 // Map of routes that have custom page implementations
 const CUSTOM_PAGES: Record<string, React.ComponentType> = {
@@ -100,6 +101,28 @@ function AppContent() {
   // Authenticated but no hotel selected — show hotel selection screen
   if (needsHotelSelection) {
     return <HotelSelectionScreen />;
+  }
+
+  // Forced password change on first login — block all usage until updated
+  if (user?.must_change_password === true) {
+    return (
+      <>
+        <AppLayout>
+          <div className="px-8 pt-6 pb-8">
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-12 h-12 rounded-xl bg-warning/10 flex items-center justify-center mb-4">
+                <Lock className="w-6 h-6 text-warning" />
+              </div>
+              <h1 className="text-xl font-bold text-ink">Yêu cầu đổi mật khẩu</h1>
+              <p className="text-sm text-info mt-2 max-w-md">
+                Tài khoản của bạn cần đổi mật khẩu trước khi tiếp tục sử dụng hệ thống.
+              </p>
+            </div>
+          </div>
+        </AppLayout>
+        <ChangePasswordModal open forced />
+      </>
+    );
   }
 
   // Route guard: block non-super-admins from accessing super-admin-only routes

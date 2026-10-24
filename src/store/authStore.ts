@@ -325,6 +325,41 @@ export function updateUser(id: string, patch: Partial<User>, actor?: ActorContex
   usersStore.set((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
 }
 
+/** Verify the current password and, if correct, set a new one. Clears `must_change_password`. */
+export function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): { success: boolean; error?: string } {
+  // Resolve the signed-in user from the active session
+  const sessionRaw = (() => {
+    try { return localStorage.getItem('oms_session'); } catch { return null; }
+  })();
+  if (!sessionRaw) return { success: false, error: 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.' };
+  let session: { userId: string } | null = null;
+  try { session = JSON.parse(sessionRaw) as { userId: string }; } catch { /* ignore */ }
+  if (!session) return { success: false, error: 'Phiên đăng nhập không hợp lệ.' };
+
+  const user = usersStore.get().find((u) => u.id === session!.userId);
+  if (!user) return { success: false, error: 'Không tìm thấy người dùng.' };
+  if (user.password !== currentPassword) {
+    return { success: false, error: 'Mật khẩu hiện tại không đúng.' };
+  }
+  usersStore.set((prev) =>
+    prev.map((u) => (u.id === user.id ? { ...u, password: newPassword, must_change_password: false } : u)),
+  );
+  return { success: true };
+}
+
+/** Admin-forced reset of another user's password. Optionally force a change on next login. */
+export function adminResetPassword(
+  userId: string,
+  newPassword: string,
+  requireForceChange = true,
+  actor?: ActorContext,
+): void {
+  updateUser(userId, { password: newPassword, must_change_password: requireForceChange }, actor);
+}
+
 export function deleteUser(id: string, actor?: ActorContext): void {
   if (actor && !actor.is_super_admin) {
     if (actor.activeHotelId && !userBelongsToHotel(id, actor.activeHotelId)) return;
