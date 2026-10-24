@@ -389,6 +389,25 @@ export function createUserFromEmployee(
   return user;
 }
 
+/**
+ * Batch-create login accounts for a list of employees.
+ * Skips any employee whose employee_code already exists as a username.
+ * Returns the list of created Users.
+ */
+export function createUsersFromEmployeeList(
+  employees: { id: string; employee_code: string; display_name: string; full_name: string }[],
+  defaultPassword: string,
+  hotelId: string | null,
+  actor?: ActorContext,
+): User[] {
+  const created: User[] = [];
+  for (const emp of employees) {
+    const user = createUserFromEmployee(emp, defaultPassword, hotelId, actor);
+    if (user) created.push(user);
+  }
+  return created;
+}
+
 // ── Role Template CRUD ──────────────────────────────────────────
 export function addRoleTemplate(data: Omit<RoleTemplate, 'id'>): RoleTemplate {
   const role: RoleTemplate = { ...data, id: ID.role() };

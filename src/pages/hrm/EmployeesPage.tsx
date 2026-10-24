@@ -3,7 +3,7 @@ import { useEmployees, useDepartments, useWorkStatuses, nextEmployeeCode, genId 
 import type { Employee } from '@/hrm/types';
 import { Field, TextInput, Select, Toggle, Button, Badge } from '@/components/ui';
 import { Users, Plus, Pencil, Trash2, Search, Save, Phone, Calendar, Briefcase, Download, Upload, FileDown, UserPlus, KeyRound, ShieldCheck } from 'lucide-react';
-import { createUserFromEmployee } from '@/store/authStore';
+import { createUserFromEmployee, createUsersFromEmployeeList } from '@/store/authStore';
 import { useRouter } from '@/router/RouterContext';
 import { localDateStr } from '@/hrm/dateUtils';
 import { useAuth } from '@/auth/AuthContext';
@@ -66,6 +66,10 @@ export default function EmployeesPage() {
   const [accountPrompt, setAccountPrompt] = useState<{ employee: Employee } | null>(null);
   const [accountPassword, setAccountPassword] = useState('123456');
   const [createdAccount, setCreatedAccount] = useState<{ code: string; userId: string } | null>(null);
+  // Bulk account creation dialog state
+  const [bulkPrompt, setBulkPrompt] = useState<{ employees: Employee[] } | null>(null);
+  const [bulkPassword, setBulkPassword] = useState('123456');
+  const [bulkResult, setBulkResult] = useState<{ created: number; skipped: number } | null>(null);
 
   const deptName = (id: string) => departments.find((d) => d.id === id)?.name ?? '—';
   const statusName = (id: string) => statuses.find((s) => s.id === id)?.name ?? '—';
@@ -189,7 +193,7 @@ export default function EmployeesPage() {
     if (!file) return;
     try {
       const parsed = await parseXlsx<Employee>(file, EMPLOYEE_COLUMNS);
-      let count = 0;
+      const imported: Employee[] = [];
       setEmployees((prev) => {
         const next = [...prev];
         for (const row of parsed) {
@@ -212,16 +216,36 @@ export default function EmployeesPage() {
             base_salary: Number(row.base_salary) || 0,
           };
           next.push(emp);
-          count++;
+          imported.push(emp);
         }
         return next;
       });
+      const count = imported.length;
       setImportMsg(`Đã nhập ${count} nhân viên.`);
+      if (count > 0) {
+        setBulkPassword('123456');
+        setBulkPrompt({ employees: imported });
+      }
     } catch {
       setImportMsg('Lỗi đọc file Excel. Vui lòng kiểm tra định dạng.');
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  const confirmBulkCreate = () => {
+    if (!bulkPrompt) return;
+    const created = createUsersFromEmployeeList(
+      bulkPrompt.employees,
+      bulkPassword || '123456',
+      activeHotelId,
+      { is_super_admin: user?.is_super_admin ?? false, activeHotelId },
+    );
+    const total = bulkPrompt.employees.length;
+    setBulkPrompt(null);
+    setBulkResult({ created: created.length, skipped: total - created.length });
+  };
+
+  const skipBulkCreate = () => setBulkPrompt(null);
 
   return (
     <div className="px-8 pt-6 pb-8">
@@ -426,6 +450,66 @@ export default function EmployeesPage() {
             <div className="px-6 py-4 border-t border-line/30 flex items-center justify-end gap-3">
               <Button variant="secondary" onClick={() => setCreatedAccount(null)}>Đóng</Button>
               <Button onClick={goToUserManagement}><ShieldCheck className="w-3.5 h-3.5" /> Phân quyền ngay</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk account creation dialog */}
+      {bulkPrompt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={skipBulkCreate} />
+          <div className="relative w-full max-w-md bg-card rounded-2xl shadow-2xl border border-line/30 flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-line/30">
+              <h3 className="text-base font-semibold text-ink flex items-center gap-2">
+                <Users className="w-4 h-4 text-primary" /> Tạo tài khoản hàng loạt
+              </h3>
+              <button onClick={skipBulkCreate} className="p-1.5 rounded-lg text-info hover:bg-primary-soft/40 transition-colors">✕</button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <p className="text-sm text-info">
+                Đã nhập thành công <span className="font-semibold text-ink">{bulkPrompt.employees.length}</span> nhân viên.
+                Bạn có muốn tự động tạo tài khoản đăng nhập cho tất cả nhân viên này không?
+              </p>
+              <Field label="Mật khẩu mặc định">
+                <TextInput value={bulkPassword} onChange={(e) => setBulkPassword(e.target.value)} placeholder="123456" />
+              </Field>
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary-soft/20 border border-primary/10 text-xs text-info">
+                <KeyRound className="w-3.5 h-3.5 shrink-0 text-primary" />
+                <span>Mỗi nhân viên sẽ có tên đăng nhập là mã nhân viên, mật khẩu chung, và tất cả quyền mặc định là "Không hiển thị".</span>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-line/30 flex items-center justify-end gap-3">
+              <Button variant="secondary" onClick={skipBulkCreate}>Bỏ qua</Button>
+              <Button onClick={confirmBulkCreate}><Save className="w-3.5 h-3.5" /> Tạo tài khoản</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk result notice */}
+      {bulkResult && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={() => setBulkResult(null)} />
+          <div className="relative w-full max-w-md bg-card rounded-2xl shadow-2xl border border-line/30 flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-line/30">
+              <h3 className="text-base font-semibold text-ink flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-success" /> Tạo tài khoản hoàn tất
+              </h3>
+              <button onClick={() => setBulkResult(null)} className="p-1.5 rounded-lg text-info hover:bg-primary-soft/40 transition-colors">✕</button>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <p className="text-sm text-ink">
+                Đã tạo <span className="font-semibold">{bulkResult.created}</span> tài khoản mới.
+                {bulkResult.skipped > 0 && (
+                  <span className="text-info"> {bulkResult.skipped} nhân viên đã có tài khoản từ trước.</span>
+                )}
+              </p>
+              <p className="text-sm text-info">Vui lòng phân quyền cho các tài khoản này.</p>
+            </div>
+            <div className="px-6 py-4 border-t border-line/30 flex items-center justify-end gap-3">
+              <Button variant="secondary" onClick={() => setBulkResult(null)}>Đóng</Button>
+              <Button onClick={goToUserManagement}><ShieldCheck className="w-3.5 h-3.5" /> Đến Quản lý Người dùng</Button>
             </div>
           </div>
         </div>
