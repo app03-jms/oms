@@ -16,6 +16,7 @@ import TimesheetPage from '@/pages/hrm/TimesheetPage';
 import ApprovalsPage from '@/pages/hrm/ApprovalsPage';
 import PayrollPage from '@/pages/hrm/PayrollPage';
 import UserManagementPage from '@/pages/settings/UserManagementPage';
+import RoleManagementPage from '@/pages/settings/RoleManagementPage';
 import HotelConfigPage from '@/pages/system/HotelConfigPage';
 import HotelSelectionScreen from '@/pages/HotelSelectionScreen';
 
@@ -30,6 +31,7 @@ const CUSTOM_PAGES: Record<string, React.ComponentType> = {
   '/hrm/approvals': ApprovalsPage,
   '/hrm/payroll': PayrollPage,
   '/system/users': UserManagementPage,
+  '/system/roles': RoleManagementPage,
   '/system/hotel-config': HotelConfigPage,
 };
 

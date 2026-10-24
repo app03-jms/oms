@@ -5,6 +5,7 @@ import {
   useUsers,
   useHotels,
   useMappings,
+  useRoleTemplates,
   addUser,
   updateUser,
   deleteUser,
@@ -16,7 +17,7 @@ import {
   MODULE_LABELS,
   SUBFEATURE_LABELS,
 } from '@/store/authStore';
-import type { User, HotelRole, PermissionLevel, FeatureModule, SubFeature, FeaturePermissionMatrix } from '@/types/auth';
+import type { User, HotelRole, PermissionLevel, FeatureModule, SubFeature, FeaturePermissionMatrix, RoleTemplate } from '@/types/auth';
 import { MODULE_SUBFEATURES } from '@/types/auth';
 import { Button, Badge, TextInput, Select, Field, Toggle } from '@/components/ui';
 import {
@@ -99,6 +100,7 @@ function UserFormModal({
   isSuperAdminActor,
   lockedHotelId,
   employees,
+  roleTemplates,
   onSave,
   onClose,
 }: {
@@ -108,6 +110,7 @@ function UserFormModal({
   isSuperAdminActor: boolean;
   lockedHotelId: string | null;
   employees: { id: string; employee_code: string; full_name: string; display_name: string }[];
+  roleTemplates: RoleTemplate[];
   onSave: (data: { user: Omit<User, 'id'> | User; assignments: HotelAssignment[]; isNew: boolean }) => void;
   onClose: () => void;
 }) {
@@ -135,6 +138,23 @@ function UserFormModal({
     return [];
   });
   const [error, setError] = useState('');
+  const [appliedTemplateId, setAppliedTemplateId] = useState('');
+
+  const applyRoleTemplate = (templateId: string) => {
+    setAppliedTemplateId(templateId);
+    if (!templateId) return;
+    const tpl = roleTemplates.find((r) => r.id === templateId);
+    if (!tpl) return;
+    setAssignments((prev) =>
+      prev.map((a) => ({
+        ...a,
+        permissions: ALL_SUBFEATURES.reduce((acc, sf) => {
+          acc[sf] = (tpl.permissions[sf] as PermissionLevel) ?? 'hidden';
+          return acc;
+        }, {} as FeaturePermissionMatrix),
+      }))
+    );
+  };
 
   const toggleHotel = (hotelId: string) => {
     const existing = assignments.find((a) => a.hotel_id === hotelId);
@@ -262,6 +282,21 @@ function UserFormModal({
             </div>
           )}
 
+          {/* Role template quick-apply */}
+          {!isSuperAdmin && assignments.length > 0 && roleTemplates.length > 0 && (
+            <Field label="Áp dụng vai trò mẫu">
+              <Select value={appliedTemplateId} onChange={(e) => applyRoleTemplate(e.target.value)}>
+                <option value="">— Chọn vai trò mẫu —</option>
+                {roleTemplates.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.name}{tpl.is_builtin ? ' (mặc định)' : ''}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-[11px] text-line mt-1">Áp dụng quyền của vai trò mẫu cho tất cả khách sạn đã phân công.</p>
+            </Field>
+          )}
+
           {!isSuperAdmin && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
@@ -380,6 +415,7 @@ export default function UserManagementPage() {
   const [hotels] = useHotels();
   const [mappings] = useMappings();
   const [hrmEmployees] = useEmployees();
+  const [roleTemplates] = useRoleTemplates();
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
@@ -678,6 +714,7 @@ export default function UserManagementPage() {
           isSuperAdminActor={isSuperAdmin}
           lockedHotelId={lockedHotelId}
           employees={hrmEmployees}
+          roleTemplates={roleTemplates}
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditing(null); }}
         />
