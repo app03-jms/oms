@@ -46,6 +46,15 @@ export type FeaturePermissionMatrix = Partial<Record<SubFeature, PermissionLevel
 
 export type HotelRole = 'hotel_admin' | 'staff';
 
+/** Reusable permission role template that can be applied to user-hotel assignments */
+export interface RoleTemplate {
+  id: string;          // role_xxxxxxxx
+  name: string;
+  description?: string;
+  permissions: FeaturePermissionMatrix;
+  is_builtin?: boolean; // true for the seed presets (cannot be deleted)
+}
+
 export type CoreModule = 'hrm' | 'frontdesk' | 'housekeeping' | 'inventory';
 
 export interface Hotel {

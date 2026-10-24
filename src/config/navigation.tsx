@@ -23,6 +23,7 @@ import {
   Sliders,
   ShieldCheck,
   Hotel,
+  UserCog,
   type LucideIcon,
 } from 'lucide-react';
 import type { SubFeature } from '@/types/auth';
@@ -109,6 +110,7 @@ export const NAVIGATION: NavConfigItem[] = [
     icon: ShieldCheck,
     children: [
       { label: 'Quản lý Người dùng', path: '/system/users', icon: Users, subFeature: 'system_users' },
+      { label: 'Quản lý Vai trò', path: '/system/roles', icon: UserCog, subFeature: 'system_users' },
       { label: 'Cấu hình Khách sạn', path: '/system/hotel-config', icon: Hotel, subFeature: 'system_hotel_config' },
     ],
   },

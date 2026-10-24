@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { User, UserHotelAccess, Hotel, FeaturePermissionMatrix, SubFeature, HotelRole, PermissionLevel, FeatureModule } from '@/types/auth';
+import type { User, UserHotelAccess, Hotel, FeaturePermissionMatrix, SubFeature, HotelRole, PermissionLevel, FeatureModule, RoleTemplate } from '@/types/auth';
 import { MODULE_SUBFEATURES } from '@/types/auth';
 import { ID } from '@/utils/idGenerator';
 
@@ -7,6 +7,7 @@ import { ID } from '@/utils/idGenerator';
 const K_USERS = 'oms_auth_users';
 const K_HOTELS = 'oms_auth_hotels';
 const K_MAPPINGS = 'oms_auth_user_hotel_mappings';
+const K_ROLES = 'oms_auth_role_templates';
 const K_ACTIVE_HOTEL = 'oms_active_hotel_id';
 
 // ── Permission presets ────────────────────────────────────────
@@ -72,6 +73,33 @@ export const HOTEL_ADMIN_PERMISSIONS: FeaturePermissionMatrix = {
   system_users: 'update',
   system_hotel_config: 'view',
 };
+
+// ── Seed role templates ───────────────────────────────────────
+const SEED_ROLE_HOTEL_ADMIN: RoleTemplate = {
+  id: 'role_seedadm',
+  name: 'Quản lý Khách sạn',
+  description: 'Toàn quyền vận hành các module khách sạn (duyệt, cập nhật, xem tất cả).',
+  permissions: HOTEL_ADMIN_PERMISSIONS,
+  is_builtin: true,
+};
+
+const SEED_ROLE_STAFF: RoleTemplate = {
+  id: 'role_seedstf',
+  name: 'Nhân viên',
+  description: 'Quyền cơ bản: xem hồ sơ, cập nhật tác vụ vận hành.',
+  permissions: STAFF_PERMISSIONS,
+  is_builtin: true,
+};
+
+const SEED_ROLE_FULL: RoleTemplate = {
+  id: 'role_seedfull',
+  name: 'Toàn quyền',
+  description: 'Tất cả sub-feature ở mức Xóa (dành cho Super Admin / vận hành).',
+  permissions: FULL_PERMISSIONS,
+  is_builtin: true,
+};
+
+const SEED_ROLES: RoleTemplate[] = [SEED_ROLE_FULL, SEED_ROLE_HOTEL_ADMIN, SEED_ROLE_STAFF];
 
 // ── Seed data ─────────────────────────────────────────────────
 const SEED_HOTEL_1: Hotel = {
@@ -199,6 +227,7 @@ class SimpleStore<T> {
 const usersStore = new SimpleStore<User[]>(K_USERS, [SEED_SUPER_ADMIN, SEED_HOTEL_ADMIN, SEED_STAFF]);
 const hotelsStore = new SimpleStore<Hotel[]>(K_HOTELS, [SEED_HOTEL_1, SEED_HOTEL_2]);
 const mappingsStore = new SimpleStore<UserHotelAccess[]>(K_MAPPINGS, SEED_MAPPINGS);
+const rolesStore = new SimpleStore<RoleTemplate[]>(K_ROLES, SEED_ROLES);
 
 // ── Hooks ─────────────────────────────────────────────────────
 export function useUsers(): [User[], (updater: (prev: User[]) => User[]) => void] {
@@ -219,6 +248,12 @@ export function useMappings(): [UserHotelAccess[], (updater: (prev: UserHotelAcc
   return [value, update];
 }
 
+export function useRoleTemplates(): [RoleTemplate[], (updater: (prev: RoleTemplate[]) => RoleTemplate[]) => void] {
+  const value = useSyncExternalStore(rolesStore.subscribe, rolesStore.getSnapshot);
+  const update = (updater: (prev: RoleTemplate[]) => RoleTemplate[]) => rolesStore.set(updater);
+  return [value, update];
+}
+
 // ── Non-reactive getters (for login flow) ─────────────────────
 export function getUsers(): User[] {
   return usersStore.get();
@@ -230,6 +265,14 @@ export function getHotels(): Hotel[] {
 
 export function getMappings(): UserHotelAccess[] {
   return mappingsStore.get();
+}
+
+export function getRoleTemplates(): RoleTemplate[] {
+  return rolesStore.get();
+}
+
+export function getRoleTemplateById(roleId: string): RoleTemplate | undefined {
+  return rolesStore.get().find((r) => r.id === roleId);
 }
 
 export function getUserHotelAccess(userId: string): UserHotelAccess[] {
@@ -302,6 +345,24 @@ export function updateHotel(id: string, patch: Partial<Hotel>): void {
 
 export function deleteUserHotelMapping(id: string): void {
   mappingsStore.set((prev) => prev.filter((m) => m.id !== id));
+}
+
+// ── Role Template CRUD ──────────────────────────────────────────
+export function addRoleTemplate(data: Omit<RoleTemplate, 'id'>): RoleTemplate {
+  const role: RoleTemplate = { ...data, id: ID.role() };
+  rolesStore.set((prev) => [...prev, role]);
+  return role;
+}
+
+export function updateRoleTemplate(id: string, patch: Partial<Omit<RoleTemplate, 'id'>>): void {
+  rolesStore.set((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+}
+
+export function deleteRoleTemplate(id: string): void {
+  // Built-in templates cannot be deleted
+  const role = rolesStore.get().find((r) => r.id === id);
+  if (!role || role.is_builtin) return;
+  rolesStore.set((prev) => prev.filter((r) => r.id !== id));
 }
 
 export function setUserHotelMappings(userId: string, assignments: { hotel_id: string; role: HotelRole; permissions: FeaturePermissionMatrix }[], actor?: ActorContext): void {

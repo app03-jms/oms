@@ -34,4 +34,5 @@ export const ID = {
   employee: () => generateUniqueId('emp'),
   department: () => generateUniqueId('dep'),
   shift: () => generateUniqueId('shf'),
+  role: () => generateUniqueId('role'),
 } as const;
