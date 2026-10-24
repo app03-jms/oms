@@ -92,8 +92,6 @@ export default function AttendancePage() {
   const { user } = useAuth();
   const { getLevel, LEVEL_RANK } = useHrmPermission();
   const attLevel = getLevel('hrm_attendance');
-  const isOwnOnly = attLevel === 'view' && !user?.is_super_admin;
-  const today = todayStr();
   const [selectedEmpId, setSelectedEmpId] = useState<string>('');
 
   // Resolve current user's linked employee: match employee.user_id === user.id,
@@ -111,27 +109,11 @@ export default function AttendancePage() {
   // For 'view_all' and above: show all employees.
   const scopedEmployees = useMemo(() => {
     if (attLevel === 'hidden') return [];
-    if (isOwnOnly) {
+    if (attLevel === 'view' && !user?.is_super_admin) {
       return myEmployee ? [myEmployee] : [];
     }
     return employees;
-  }, [employees, attLevel, myEmployee, isOwnOnly]);
-
-  // Today's logs scoped to the user's permission level
-  const scopedTodayLogs = useMemo(() => {
-    const dayLogs = logs.filter((l) => l.date === today);
-    if (isOwnOnly) {
-      return myEmployee ? dayLogs.filter((l) => l.employee_id === myEmployee.id) : [];
-    }
-    return dayLogs;
-  }, [logs, today, isOwnOnly, myEmployee]);
-
-  const summaryStats = useMemo(() => ({
-    total: scopedTodayLogs.length,
-    valid: scopedTodayLogs.filter((l) => l.status === 'valid').length,
-    pending: scopedTodayLogs.filter((l) => l.status === 'pending_approval').length,
-    outsideRadius: scopedTodayLogs.filter((l) => l.is_outside_radius).length,
-  }), [scopedTodayLogs]);
+  }, [employees, attLevel, myEmployee, user]);
 
   // Whether the current user can clock in/out (requires at least 'update')
   const canClock = LEVEL_RANK[attLevel] >= LEVEL_RANK.update;
@@ -151,12 +133,14 @@ export default function AttendancePage() {
   const [clockAction, setClockAction] = useState<'in' | 'out'>('in');
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null);
 
+  const today = todayStr();
+
   // Auto-select: for personal-scope users, lock to their own employee record.
   // For full-scope users, default to first available employee.
   useEffect(() => {
     if (scopedEmployees.length === 0) return;
     if (!scopedEmployees.some((e) => e.id === selectedEmpId)) {
-      if (isOwnOnly && myEmployee) {
+      if (attLevel === 'view' && myEmployee) {
         setSelectedEmpId(myEmployee.id);
       } else {
         setSelectedEmpId(scopedEmployees[0].id);
@@ -344,9 +328,9 @@ export default function AttendancePage() {
       { label: 'Trạng thái' },
     ];
     const today = todayStr();
-    const dayLogs = scopedTodayLogs;
+    const dayLogs = logs.filter((l) => l.date === today);
     const rows = dayLogs.map((l) => {
-      const emp = scopedEmployees.find((e) => e.id === l.employee_id);
+      const emp = employees.find((e) => e.id === l.employee_id);
       const sch = shifts.find((s) => s.id === l.shift_id);
       const statusLabel = l.status === 'valid' ? 'Đúng ca' : l.status === 'pending_approval' ? 'Chờ duyệt' : 'Từ chối';
       return [
@@ -387,46 +371,6 @@ export default function AttendancePage() {
           <ExportDropdown options={[
             { key: 'pdf', label: 'Xuất PDF (.pdf)', icon: 'pdf', onClick: exportAttendancePdf },
           ]} />
-        </div>
-      </div>
-
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-card rounded-xl border border-line/30 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Clock className="w-4 h-4 text-primary" />
-            </div>
-            <span className="text-xs font-medium text-info">Tổng bản ghi</span>
-          </div>
-          <p className="text-2xl font-bold text-ink tabular-nums">{summaryStats.total}</p>
-        </div>
-        <div className="bg-card rounded-xl border border-line/30 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4 text-success" />
-            </div>
-            <span className="text-xs font-medium text-info">Đúng ca</span>
-          </div>
-          <p className="text-2xl font-bold text-success tabular-nums">{summaryStats.valid}</p>
-        </div>
-        <div className="bg-card rounded-xl border border-line/30 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center">
-              <AlertTriangle className="w-4 h-4 text-warning" />
-            </div>
-            <span className="text-xs font-medium text-info">Chờ duyệt</span>
-          </div>
-          <p className="text-2xl font-bold text-warning tabular-nums">{summaryStats.pending}</p>
-        </div>
-        <div className="bg-card rounded-xl border border-line/30 p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-danger/10 flex items-center justify-center">
-              <MapPin className="w-4 h-4 text-danger" />
-            </div>
-            <span className="text-xs font-medium text-info">Ngoài bán kính</span>
-          </div>
-          <p className="text-2xl font-bold text-danger tabular-nums">{summaryStats.outsideRadius}</p>
         </div>
       </div>
 
